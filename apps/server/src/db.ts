@@ -71,20 +71,46 @@ export class DatabaseManager {
       $payload: event.payload ? JSON.stringify(event.payload) : null,
     });
 
-    this.updateSessionEventCount(event.sessionId);
+    this.updateSessionEventCount(event.sessionId, event.sourceApp);
+    this.updateSessionStatus(event.sessionId, event.eventType);
 
     return result.lastInsertRowid as number;
   }
 
-  private updateSessionEventCount(sessionId: string) {
+  private updateSessionEventCount(sessionId: string, sourceApp: string) {
     const stmt = this.db.prepare(`
       INSERT INTO sessions (session_id, source_app, start_time, status)
-      VALUES ($sessionId, 'unknown', $timestamp, 'active')
+      VALUES ($sessionId, $sourceApp, $timestamp, 'active')
       ON CONFLICT(session_id) DO UPDATE SET
-        event_count = event_count + 1,
-        status = CASE WHEN end_time IS NOT NULL THEN 'completed' ELSE 'active' END
+        event_count = event_count + 1
     `);
-    stmt.run({ $sessionId: sessionId, $timestamp: Date.now() });
+    stmt.run({ $sessionId: sessionId, $sourceApp: sourceApp, $timestamp: Date.now() });
+  }
+
+  /**
+   * Session status follows real V2 lifecycle events only. Completion is
+   * never inferred from inactivity.
+   */
+  private updateSessionStatus(sessionId: string, eventType: string) {
+    const terminalStatus: Record<string, string> = {
+      'session.execution.succeeded': 'completed',
+      'session.execution.failed': 'failed',
+      'session.execution.interrupted': 'interrupted',
+      'session.deleted': 'completed',
+    };
+    if (eventType === 'session.created' || eventType === 'session.execution.started') {
+      this.db.prepare(`
+        UPDATE sessions SET status = 'active', end_time = NULL
+        WHERE session_id = $sessionId AND end_time IS NOT NULL
+      `).run({ $sessionId: sessionId });
+      return;
+    }
+    const status = terminalStatus[eventType];
+    if (!status) return;
+    this.db.prepare(`
+      UPDATE sessions SET status = $status, end_time = $timestamp
+      WHERE session_id = $sessionId
+    `).run({ $sessionId: sessionId, $status: status, $timestamp: Date.now() });
   }
 
   getRecentEvents(limit: number = 100, offset: number = 0, filters?: FilterOptions): EventRecord[] {

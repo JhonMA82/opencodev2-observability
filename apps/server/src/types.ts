@@ -25,11 +25,21 @@ export interface WebSocketMessage {
   data?: any;
 }
 
-export type EventType = 
+export type EventType =
   | 'tool.execute.before'
   | 'tool.execute.after'
   | 'session.created'
   | 'session.deleted'
+  | 'session.execution.started'
+  | 'session.execution.succeeded'
+  | 'session.execution.failed'
+  | 'session.execution.interrupted'
+  | 'session.step.started'
+  | 'session.step.ended'
+  | 'session.step.failed'
+  | 'session.retry.scheduled'
+  | 'session.compaction.ended'
+  | 'session.status'
   | 'session.idle'
   | 'session.error'
   | 'session.compacted'
