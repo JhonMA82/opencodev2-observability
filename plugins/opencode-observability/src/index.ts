@@ -1,177 +1,116 @@
-import type { Plugin } from '@opencode-ai/plugin';
-import { sendEvent, generateSessionId } from './sender';
+import { Plugin } from "@opencode/plugin";
+import {
+  normalizeStreamEvent,
+  normalizeToolAfter,
+  normalizeToolBefore,
+} from "./normalize";
+import { sendEvent } from "./sender";
 
-interface SessionState {
-  sessionId: string;
-  startTime: number;
-  eventCount: number;
+interface PendingToolCall {
+  startedAt: number;
 }
 
-const sessions = new Map<string, SessionState>();
+/** Upper bound for in-flight tool calls kept only to compute durations. */
+const MAX_PENDING_CALLS = 1000;
 
-function getOrCreateSessionId(input: any): string {
-  const sessionId = input.sessionID || input.session_id || input.sessionId;
-  
-  if (sessionId) {
-    if (!sessions.has(sessionId)) {
-      sessions.set(sessionId, {
-        sessionId,
-        startTime: Date.now(),
-        eventCount: 0,
-      });
-    }
-    return sessionId;
-  }
-  
-  const newSessionId = generateSessionId();
-  sessions.set(newSessionId, {
-    sessionId: newSessionId,
-    startTime: Date.now(),
-    eventCount: 0,
-  });
-  return newSessionId;
+function debugEnabled(): boolean {
+  return process.env.OPENCODE_OBSERVABILITY_DEBUG === "1";
 }
 
-function incrementEventCount(sessionId: string) {
-  const session = sessions.get(sessionId);
-  if (session) {
-    session.eventCount++;
+function debugLog(message: string): void {
+  if (debugEnabled()) {
+    console.log(`[Observability] ${message}`);
   }
 }
 
-export const ObservabilityPlugin: Plugin = async ({ client, project }) => {
-  const sourceApp = project?.name || 'opencode-project';
+/**
+ * Human-readable project name from the V2 location context. The session
+ * identity always stays separate from the project identity.
+ */
+function projectNameOf(location: {
+  readonly directory?: string;
+  readonly project?: { readonly canonical?: string; readonly directory?: string };
+}): string {
+  const canonical = location.project?.canonical || location.project?.directory || location.directory || "";
+  const parts = canonical.split(/[/\\]/).filter((part) => part.length > 0);
+  return parts.length > 0 ? (parts[parts.length - 1] as string) : "unknown-project";
+}
 
-  return {
-    'tool.execute.before': async (input, output) => {
-      const sessionId = getOrCreateSessionId(input);
-      incrementEventCount(sessionId);
+export default Plugin.define({
+  id: "opencode.observability",
 
-      await sendEvent({
-        source_app: sourceApp,
-        session_id: sessionId,
-        event_type: 'tool.execute.before',
-        tool_name: input.tool,
-        tool_input: output.args,
-        payload: {
-          tool: input.tool,
-          args: output.args,
-          worktree: input.worktree,
-        },
-      });
-    },
+  async setup(ctx) {
+    const sourceApp = projectNameOf(ctx.location);
+    const registrations: { dispose: () => Promise<void> }[] = [];
+    const pendingCalls = new Map<string, PendingToolCall>();
+    const abort = new AbortController();
 
-    'tool.execute.after': async (input, result) => {
-      const sessionId = getOrCreateSessionId(input);
-      incrementEventCount(sessionId);
+    debugLog(`plugin loaded for project: ${sourceApp}`);
 
-      await sendEvent({
-        source_app: sourceApp,
-        session_id: sessionId,
-        event_type: 'tool.execute.after',
-        tool_name: input.tool,
-        tool_input: input.args,
-        tool_output: result,
-        payload: {
-          tool: input.tool,
-          args: input.args,
-          result,
-          duration: result?.duration,
-        },
-      });
-    },
-
-    'event': async ({ event }) => {
-      const sessionId = (event as any).session_id || (event as any).sessionID || generateSessionId();
-
-      switch (event.type) {
-        case 'session.created':
-          sessions.set(sessionId, {
-            sessionId,
-            startTime: Date.now(),
-            eventCount: 0,
-          });
-          await sendEvent({
-            source_app: sourceApp,
-            session_id: sessionId,
-            event_type: 'session.created',
-            payload: event.properties,
-          });
-          break;
-
-        case 'session.deleted':
-          await sendEvent({
-            source_app: sourceApp,
-            session_id: sessionId,
-            event_type: 'session.deleted',
-            payload: event.properties,
-          });
-          sessions.delete(sessionId);
-          break;
-
-        case 'session.idle':
-          await sendEvent({
-            source_app: sourceApp,
-            session_id: sessionId,
-            event_type: 'session.idle',
-            payload: event.properties,
-          });
-          break;
-
-        case 'session.error':
-          await sendEvent({
-            source_app: sourceApp,
-            session_id: sessionId,
-            event_type: 'session.error',
-            payload: event.properties,
-          });
-          break;
-
-        case 'session.compacted':
-          await sendEvent({
-            source_app: sourceApp,
-            session_id: sessionId,
-            event_type: 'session.compacted',
-            payload: event.properties,
-          });
-          break;
-
-        case 'message.updated':
-          await sendEvent({
-            source_app: sourceApp,
-            session_id: sessionId,
-            event_type: 'message.updated',
-            payload: event.properties,
-          });
-          break;
-
-        case 'permission.replied':
-          await sendEvent({
-            source_app: sourceApp,
-            session_id: sessionId,
-            event_type: 'permission.replied',
-            payload: event.properties,
-          });
-          break;
+    function trackCallStart(callID: string): void {
+      if (pendingCalls.size >= MAX_PENDING_CALLS) {
+        const oldest = pendingCalls.keys().next();
+        if (!oldest.done) pendingCalls.delete(oldest.value);
       }
-    },
+      pendingCalls.set(callID, { startedAt: Date.now() });
+    }
 
-    'stop': async (input) => {
-      const sessionId = getOrCreateSessionId(input);
-      const session = sessions.get(sessionId);
-      
-      await sendEvent({
-        source_app: sourceApp,
-        session_id: sessionId,
-        event_type: 'stop',
-        payload: {
-          reason: input.reason,
-          eventCount: session?.eventCount || 0,
-          duration: session ? Date.now() - session.startTime : 0,
-        },
-      });
-    },
-  };
-};
+    function takeCallDuration(callID: string): number | undefined {
+      const pending = pendingCalls.get(callID);
+      pendingCalls.delete(callID);
+      if (!pending) return undefined;
+      return Math.max(0, Date.now() - pending.startedAt);
+    }
 
-export default ObservabilityPlugin;
+    registrations.push(
+      await ctx.tool.hook("execute.before", (input) => {
+        if (!input.sessionID) return;
+        trackCallStart(input.id);
+        const normalized = normalizeToolBefore(sourceApp, input);
+        // Fire-and-forget: observability must never delay a tool call.
+        if (normalized) void sendEvent(normalized);
+      }),
+    );
+
+    registrations.push(
+      await ctx.tool.hook("execute.after", (input) => {
+        if (!input.sessionID) return;
+        const normalized = normalizeToolAfter(sourceApp, input, takeCallDuration(input.id));
+        if (normalized) void sendEvent(normalized);
+      }),
+    );
+
+    const running = (async () => {
+      try {
+        for await (const event of ctx.event.subscribe({ signal: abort.signal })) {
+          try {
+            const normalized = normalizeStreamEvent(sourceApp, event);
+            if (normalized) void sendEvent(normalized);
+          } catch (error) {
+            debugLog(`event handler error: ${String(error)}`);
+          }
+        }
+      } catch (error) {
+        // AbortError on dispose is expected; anything else is a bounded diagnostic.
+        if (!abort.signal.aborted) {
+          debugLog(`event subscription ended: ${String(error)}`);
+        }
+      }
+    })();
+
+    return async () => {
+      abort.abort();
+      for (const registration of registrations) {
+        try {
+          await registration.dispose();
+        } catch (error) {
+          debugLog(`registration dispose error: ${String(error)}`);
+        }
+      }
+      registrations.length = 0;
+      pendingCalls.clear();
+      await running;
+      debugLog("disposed");
+    };
+  },
+});
