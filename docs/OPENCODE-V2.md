@@ -1,9 +1,11 @@
 # Contrato OpenCode V2
 
 Mapa del contrato de OpenCode V2 del que depende este proyecto. Verificado contra
-`@opencode/plugin@2.0.4` y `@opencode/client@2.0.4` (los `.d.ts` de `2.0.4` son
-idénticos a los de `2.0.10` en `promise/plugin.d.ts`, `promise/tool.d.ts`,
-`promise/event.d.ts` y `promise/registration.d.ts`; diff comprobado el 2026-09-21).
+`@opencode/plugin@2.0.4`, `@opencode/client@2.0.4` y `@opencode/schema@2.0.4`
+(los `.d.ts` de `2.0.4` son idénticos a los de `2.0.10` en `promise/plugin.d.ts`,
+`promise/tool.d.ts`, `promise/event.d.ts` y `promise/registration.d.ts`;
+diff comprobado el 2026-09-21; `session.compacted` verificado en
+`@opencode/schema@2.0.4/dist/session-compaction-event`).
 Si OpenCode cambia su API, este documento dice exactamente dónde mirar.
 
 Implementación canónica: `plugins/opencode-observability/src/`.
@@ -98,9 +100,11 @@ const running = (async () => {
 Notas verificadas (no inventar):
 
 - `session.compaction.ended` es el evento detallado/canónico que usa este adapter.
-  `session.compacted` no existe en el contrato 2.0.4 (verificado por búsqueda en
-  `@opencode/client@2.0.4` y `@opencode/plugin@2.0.4`); se conserva en `EventType`
-  solo por filas antiguas.
+  OpenCode 2.0.4 también define `session.compacted` como evento transicional
+  (`@opencode/schema` `session-compaction-event`, `durability: "ephemeral"`,
+  `data` solo con `sessionID`); el adapter no lo usa intencionadamente para la
+  observabilidad detallada de compactación. (No forma parte del `V2Event`
+  generado de `@opencode/client@2.0.4`.)
 - `session.step.started` de 2.0.4 no declara `started`; OpenCode 2.0.12 sí lo expuso
   durante el smoke real. El adapter lo trata como campo opcional y no depende de él.
 - `session.error`, `message.updated` y `stop` se conservan en `EventType` del

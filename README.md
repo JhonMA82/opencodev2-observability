@@ -75,10 +75,12 @@ Sección en español: el contrato V2 que este proyecto asume está documentado e
   - Cada campo rico se acota primero y el cuerpo JSON final tiene un límite duro de
     16 000 caracteres; al excederlo se conserva identidad/metadata y se marca
     `truncated: true`.
-  - `session.compacted`, `session.error`, `message.updated` y `stop` son nombres V1:
-    no existen en el contrato 2.0.4 (verificado por búsqueda en `@opencode/client` y
-    `@opencode/plugin`) y solo se conservan en el backend por compatibilidad
-    con datos antiguos.
+  - `session.compaction.ended` es el evento detallado que usa este adapter.
+    OpenCode 2.0.4 también define `session.compacted` como evento transicional
+    (`durability: "ephemeral"`, solo `sessionID`); el adapter no lo usa
+    intencionadamente para la observabilidad detallada de compactación.
+    `session.error`, `message.updated` y `stop` se conservan en el backend
+    únicamente por compatibilidad con datos antiguos.
 
 ## Event Flow
 

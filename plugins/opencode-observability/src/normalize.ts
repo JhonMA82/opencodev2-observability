@@ -49,9 +49,12 @@ export interface V2StreamEvent {
 }
 
 /**
- * Session events the adapter normalizes. Names are real V2 event types
- * (`session.compaction.ended`, not the V1 `session.compacted` which does
- * not exist in V2).
+ * Session events the adapter normalizes.
+ *
+ * session.compaction.ended is the detailed compaction event used here.
+ * OpenCode 2.0.4 also exposes the transitional session.compacted event
+ * (@opencode/schema session-compaction-event, durability "ephemeral",
+ * data carries only sessionID), which this adapter intentionally ignores.
  */
 export const SUPPORTED_STREAM_EVENTS: readonly string[] = [
   "session.created",
