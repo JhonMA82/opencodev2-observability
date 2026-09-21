@@ -1,186 +1,80 @@
 #!/bin/bash
+#
+# Install the OpenCode V2 observability plugin globally.
+#
+# Single canonical source: plugins/opencode-observability/ in this repo.
+# This script copies that source (no embedded duplicate) into the OpenCode V2
+# global plugin discovery directory and installs its dependencies
+# (@opencode/plugin@2.0.4, types/build only — the runtime is OpenCode itself).
+#
+# Idempotent: re-running it restores the installed copy to the repo state.
 
 set -e
 
-echo "🌍 Setting up GLOBAL OpenCode Observability plugin..."
-echo "   This will track ALL OpenCode sessions across ALL projects"
-echo ""
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SRC="$REPO_ROOT/plugins/opencode-observability"
 
-# Determine OS and config directory
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
     CONFIG_DIR="$HOME/Library/Application Support/opencode"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
     CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
 else
-    # Default to ~/.config
     CONFIG_DIR="$HOME/.config/opencode"
 fi
 
-PLUGIN_DIR="$CONFIG_DIR/plugins"
-mkdir -p "$PLUGIN_DIR"
+DEST="$CONFIG_DIR/plugins/opencode-observability"
 
-echo "📁 Installing global plugin to: $PLUGIN_DIR"
+echo "OpenCode V2 observability plugin setup (OpenCode >= 2.0.4 < 3 only)"
+echo ""
 
-cat > "$PLUGIN_DIR/opencode-observability.ts" << 'EOF'
-import type { Plugin } from '@opencode-ai/plugin';
+if [ ! -f "$SRC/package.json" ] || [ ! -f "$SRC/src/index.ts" ]; then
+    echo "ERROR: canonical plugin source not found at $SRC" >&2
+    exit 1
+fi
 
-const SERVER_URL = process.env.OPENCODE_OBSERVABILITY_URL || 'http://localhost:4000';
+if ! command -v bun &> /dev/null; then
+    echo "ERROR: bun is required but not installed (https://bun.sh)" >&2
+    exit 1
+fi
 
-interface EventPayload {
-  source_app: string;
-  session_id: string;
-  event_type: string;
-  tool_name?: string;
-  tool_input?: any;
-  tool_output?: any;
-  payload?: any;
-}
+echo "Copying canonical source:"
+echo "  from: $SRC"
+echo "  to:   $DEST"
+rm -rf "$DEST"
+mkdir -p "$DEST"
+cp "$SRC/package.json" "$SRC/index.ts" "$SRC/tsconfig.json" "$DEST/"
+cp -r "$SRC/src" "$DEST/src"
 
-// Detect project name from directory
-function detectProjectName(project: any): string {
-  // Try to get from project object
-  if (project?.name && project.name !== 'unknown') {
-    return project.name;
-  }
-  
-  // Try to get from directory
-  if (project?.directory) {
-    const parts = project.directory.split(/[\/\\]/);
-    return parts[parts.length - 1] || 'unknown-project';
-  }
-  
-  // Fallback to current working directory
-  try {
-    const cwd = process.cwd();
-    const parts = cwd.split(/[\/\\]/);
-    return parts[parts.length - 1] || 'unknown-project';
-  } catch {
-    return 'unknown-project';
-  }
-}
+echo ""
+echo "Installing plugin dependencies (@opencode/plugin@2.0.4 for types)..."
+(cd "$DEST" && bun install)
 
-async function sendEvent(payload: EventPayload): Promise<void> {
-  try {
-    const response = await fetch(`${SERVER_URL}/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, timestamp: Date.now() }),
-    });
+echo ""
+echo "Typechecking installed copy..."
+(cd "$DEST" && bun x tsc --noEmit)
+echo "Typecheck OK."
 
-    if (!response.ok) {
-      console.error(`[Observability] Failed to send event: ${response.status}`);
-    }
-  } catch (error) {
-    // Silently fail - don't interrupt workflow
-    // console.error('[Observability] Error:', error);
-  }
-}
+echo ""
+echo "Installed files:"
+find "$DEST" -maxdepth 2 -not -path "*/node_modules*" | sort
 
-function getSessionId(input: any): string {
-  return input.sessionID || input.session_id || `session-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-}
-
-export const ObservabilityPlugin: Plugin = async ({ project, client }) => {
-  const sourceApp = detectProjectName(project);
-  
-  console.log(`[Observability] Plugin loaded for project: ${sourceApp}`);
-  console.log(`[Observability] Sending events to: ${SERVER_URL}`);
-
-  return {
-    'tool.execute.before': async (input, output) => {
-      await sendEvent({
-        source_app: sourceApp,
-        session_id: getSessionId(input),
-        event_type: 'tool.execute.before',
-        tool_name: input.tool,
-        tool_input: output.args,
-        payload: {
-          tool: input.tool,
-          args: output.args,
-          worktree: input.worktree,
-        },
-      });
-    },
-
-    'tool.execute.after': async (input, result) => {
-      await sendEvent({
-        source_app: sourceApp,
-        session_id: getSessionId(input),
-        event_type: 'tool.execute.after',
-        tool_name: input.tool,
-        tool_input: input.args,
-        tool_output: result,
-        payload: {
-          tool: input.tool,
-          args: input.args,
-          result,
-        },
-      });
-    },
-
-    'event': async ({ event }) => {
-      const sessionId = (event as any).session_id || (event as any).sessionID || getSessionId({});
-      
-      if (['session.created', 'session.idle', 'session.error', 'session.compacted', 'message.updated', 'permission.replied'].includes(event.type)) {
-        await sendEvent({
-          source_app: sourceApp,
-          session_id: sessionId,
-          event_type: event.type,
-          payload: event.properties,
-        });
-      }
-    },
-
-    'stop': async (input) => {
-      await sendEvent({
-        source_app: sourceApp,
-        session_id: getSessionId(input),
-        event_type: 'stop',
-        payload: {
-          reason: input.reason,
-        },
-      });
-    },
-  };
-};
-
-export default ObservabilityPlugin;
-EOF
-
-echo "⚙️  Creating global package.json..."
-mkdir -p "$CONFIG_DIR"
-if [ ! -f "$CONFIG_DIR/package.json" ]; then
-cat > "$CONFIG_DIR/package.json" << 'EOF'
-{
-  "dependencies": {
-    "@opencode-ai/plugin": "latest"
-  }
-}
-EOF
+echo ""
+if command -v opencode &> /dev/null; then
+    echo "Plugins known to OpenCode:"
+    opencode plugin list || true
+else
+    echo "NOTE: 'opencode' not on PATH; skipping 'opencode plugin list'."
 fi
 
 echo ""
-echo "✅ Global plugin installed successfully!"
+echo "Done. Next steps:"
+echo "  1. Start the observability server:"
+echo "       ./scripts/start-system.sh"
+echo "  2. Restart any running OpenCode sessions so the plugin loads."
+echo "  3. Verify ingestion:"
+echo "       curl http://localhost:4000/health"
+echo "       curl http://localhost:4000/events/recent?limit=5"
+echo "  4. Open the dashboard: http://localhost:5173"
 echo ""
-echo "📍 Location: $PLUGIN_DIR/observability.ts"
-echo ""
-echo "📝 Important:"
-echo "   1. Make sure the observability server is running:"
-echo "      cd $(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) && ./scripts/start-system.sh"
-echo ""
-echo "   2. OpenCode will now automatically load this plugin for ALL projects"
-echo ""
-echo "   3. Restart any running OpenCode sessions"
-echo ""
-echo "   4. Open dashboard: http://localhost:5173"
-echo ""
-echo "🔧 Environment variables (optional):"
-echo "   OPENCODE_OBSERVABILITY_URL=http://localhost:4000"
-echo ""
-echo "🐛 Troubleshooting:"
-echo "   - Check server is running: curl http://localhost:4000/health"
-echo "   - Check plugin loaded: Look for '[Observability] Plugin loaded' in OpenCode output"
-echo "   - Check events arriving: curl http://localhost:4000/events/recent"
-echo "   - Check browser console for WebSocket errors"
+echo "Optional: OPENCODE_OBSERVABILITY_URL=http://localhost:4000 (default)"
+echo "          OPENCODE_OBSERVABILITY_DEBUG=1 for bounded plugin diagnostics"
