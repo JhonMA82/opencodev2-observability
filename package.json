@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "start": "./scripts/start-system.sh",
-    "stop": "./scripts/stop-system.sh",
     "setup": "./scripts/setup.sh",
+    "uninstall": "./scripts/uninstall.sh",
     "dev:server": "cd apps/server && bun run dev",
     "dev:client": "cd apps/client && bun run dev",
-    "build": "cd apps/client && bun run build",
-    "test": "bun test"
+    "build": "cd apps/server && bun run build && cd ../client && bun run build",
+    "test": "bun test",
+    "typecheck": "cd plugins/opencode-observability && bun run typecheck",
+    "check": "bun run typecheck && bun run test && bun run build"
   },
   "keywords": [
     "opencode",

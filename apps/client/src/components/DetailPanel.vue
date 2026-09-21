@@ -173,8 +173,19 @@ const getEventName = (event: EventRecord) => {
 }
 
 const getStatusClass = (event: EventRecord) => {
-  if (event.eventType.includes('error')) return 'status-error'
-  if (event.eventType.includes('stop')) return 'status-warning'
+  if (
+    event.eventType === 'session.execution.failed' ||
+    event.eventType === 'session.step.failed' ||
+    event.eventType === 'session.error' ||
+    (event.eventType === 'tool.execute.after' && event.payload?.status === 'error')
+  ) return 'status-error'
+
+  if (
+    event.eventType === 'session.execution.interrupted' ||
+    event.eventType === 'session.retry.scheduled' ||
+    event.eventType === 'stop'
+  ) return 'status-warning'
+
   return 'status-success'
 }
 
@@ -200,7 +211,7 @@ const getBadgeLabel = (event: EventRecord) => {
 
 const formatLatency = (event: EventRecord) => {
   const payload = event.payload || {}
-  const duration = payload.duration || payload.latency || 0
+  const duration = payload.durationMs || payload.duration || payload.latency || 0
   if (duration === 0) return 'N/A'
   if (duration < 1000) return `${Math.round(duration)}ms`
   return `${(duration / 1000).toFixed(0)}s`

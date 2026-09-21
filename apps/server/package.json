@@ -9,9 +9,7 @@
     "start": "bun src/index.ts",
     "build": "bun build src/index.ts --outdir=dist --target=bun"
   },
-  "dependencies": {
-    "sqlite3": "^5.1.7"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest"

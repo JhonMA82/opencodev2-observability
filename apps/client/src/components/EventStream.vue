@@ -80,7 +80,6 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import type { EventRecord } from '../types'
 
 interface Props {
@@ -88,7 +87,7 @@ interface Props {
   selectedEvent: EventRecord | null
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 const emit = defineEmits<{
   (e: 'select', event: EventRecord): void
 }>()

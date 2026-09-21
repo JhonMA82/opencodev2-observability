@@ -36,7 +36,7 @@
         <!-- Session bars -->
         <div class="bars-container">
           <div
-            v-for="(bar, index) in sessionBars"
+            v-for="bar in sessionBars"
             :key="bar.sessionId"
             class="session-bar"
             :style="bar.style"

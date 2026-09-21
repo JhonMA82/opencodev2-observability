@@ -138,8 +138,8 @@
                 </div>
                 
                 <div class="header-meta">
-                  <span v-if="event.payload?.duration" class="duration-badge">
-                    {{ formatDuration(event.payload.duration) }}
+                  <span v-if="event.payload?.durationMs" class="duration-badge">
+                    {{ formatDuration(event.payload.durationMs) }}
                   </span>
                   <span class="event-time">{{ formatTime(event.timestamp) }}</span>
                   <span class="status-indicator" :class="getStatusClass(event)"></span>
@@ -261,7 +261,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { EventRecord } from './types'
 import LivePulseChart from './components/LivePulseChart.vue'
 
@@ -277,8 +277,7 @@ const selectedFilters = ref({
 const isConnected = ref(false)
 const ws = ref<WebSocket | null>(null)
 const selectedEvent = ref<EventRecord | null>(null)
-const autoScroll = ref(true)
-const expandedEvents = ref<Set<string>>(new Set())
+const expandedEvents = ref<Set<number>>(new Set())
 const eventsListRef = ref<HTMLDivElement | null>(null)
 
 const filteredEvents = computed(() => {
@@ -288,11 +287,6 @@ const filteredEvents = computed(() => {
     if (selectedFilters.value.toolName && event.toolName !== selectedFilters.value.toolName) return false
     return true
   })
-})
-
-const sessionIds = computed(() => {
-  const sessions = new Set(events.value.map(e => e.sessionId).filter(Boolean))
-  return Array.from(sessions).sort()
 })
 
 const eventTypes = computed(() => {
@@ -305,14 +299,37 @@ const toolNames = computed(() => {
   return Array.from(tools).sort()
 })
 
-const successCount = computed(() => 
-  filteredEvents.value.filter(e => !e.eventType.includes('error') && !e.eventType.includes('stop')).length
+type EventSeverity = 'success' | 'warning' | 'error'
+
+const getEventSeverity = (event: EventRecord): EventSeverity => {
+  if (
+    event.eventType === 'session.execution.failed' ||
+    event.eventType === 'session.step.failed' ||
+    event.eventType === 'session.error' ||
+    (event.eventType === 'tool.execute.after' && event.payload?.status === 'error')
+  ) {
+    return 'error'
+  }
+
+  if (
+    event.eventType === 'session.execution.interrupted' ||
+    event.eventType === 'session.retry.scheduled' ||
+    event.eventType === 'stop'
+  ) {
+    return 'warning'
+  }
+
+  return 'success'
+}
+
+const successCount = computed(() =>
+  filteredEvents.value.filter(e => getEventSeverity(e) === 'success').length
 )
-const warningCount = computed(() => 
-  filteredEvents.value.filter(e => e.eventType.includes('stop')).length
+const warningCount = computed(() =>
+  filteredEvents.value.filter(e => getEventSeverity(e) === 'warning').length
 )
-const errorCount = computed(() => 
-  filteredEvents.value.filter(e => e.eventType.includes('error')).length
+const errorCount = computed(() =>
+  filteredEvents.value.filter(e => getEventSeverity(e) === 'error').length
 )
 
 const sessionColors = new Map<string, string>()
@@ -365,7 +382,6 @@ const loadInitialEvents = async () => {
 }
 
 const handleFilterChange = () => {}
-const selectEvent = (event: EventRecord) => { selectedEvent.value = event }
 const clearEvents = () => { events.value = [] }
 
 const toggleEventExpand = (event: EventRecord) => {
@@ -467,8 +483,9 @@ const getEventBadgeClass = (eventType: string) => {
 }
 
 const getStatusClass = (event: EventRecord) => {
-  if (event.eventType.includes('error')) return 'status-error'
-  if (event.eventType.includes('stop')) return 'status-warning'
+  const severity = getEventSeverity(event)
+  if (severity === 'error') return 'status-error'
+  if (severity === 'warning') return 'status-warning'
   return 'status-success'
 }
 

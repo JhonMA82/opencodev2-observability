@@ -27,6 +27,20 @@ curl -fsSL https://bun.sh/install | bash
 ./scripts/start-system.sh
 ```
 
+For development/verification, the canonical repository check is:
+
+```bash
+bun run check
+```
+
+To remove only the globally installed OpenCode plugin:
+
+```bash
+bun run uninstall
+```
+
+The dashboard/server data is not deleted by uninstall.
+
 Opens:
 - Dashboard: http://localhost:5173
 - API: http://localhost:4000
