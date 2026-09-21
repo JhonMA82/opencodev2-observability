@@ -40,6 +40,19 @@ describe("sessions", () => {
     expect(row?.["source_app"]).toBe("my-project");
   });
 
+  test("counts the first observed event", () => {
+    const database = freshDb();
+    database.insertEvent({
+      timestamp: Date.now(),
+      sourceApp: "app",
+      sessionId: "ses_count",
+      eventType: "session.created",
+    });
+    const sessions = database.getActiveSessions() as Record<string, unknown>[];
+    const row = sessions.find((s) => s["session_id"] === "ses_count");
+    expect(row?.["event_count"]).toBe(1);
+  });
+
   test("status follows real lifecycle events only", () => {
     const database = freshDb();
     const now = Date.now();

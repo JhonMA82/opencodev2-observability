@@ -86,20 +86,25 @@ const running = (async () => {
 | `session.execution.succeeded` | `data.sessionID` | — |
 | `session.execution.failed` | `data.sessionID` | `error{type,message,status}` |
 | `session.execution.interrupted` | `data.sessionID` | `reason` |
-| `session.step.started` | `data.sessionID` | `assistantMessageID`, `agent`, `model{...}`, `started` |
+| `session.step.started` | `data.sessionID` | `assistantMessageID`, `agent`, `model{...}`; `started` se conserva si una versión posterior lo expone |
 | `session.step.ended` | `data.sessionID` | `assistantMessageID`, `finish`, `cost`, `tokens{input,output,reasoning,cache}` |
 | `session.step.failed` | `data.sessionID` | `assistantMessageID`, `error{...}`, `cost?`, `tokens?` |
 | `session.retry.scheduled` | `data.sessionID` | `assistantMessageID`, `attempt`, `at`, `error` |
 | `session.compaction.ended` | `data.sessionID` | `reason`, `model?`, `tokens?` |
-| `session.status` | `data.sessionID` | `status` |
+| `session.status` | `data.sessionID` | `status{type,...}` (objeto estructurado) |
 | `session.idle` | `data.sessionID` | — |
 | `permission.replied` | `data.sessionID` | `requestID`, `reply` |
 
 Notas verificadas (no inventar):
 
-- En V2 la compactación es `session.compaction.ended`; **`session.compacted` no existe**.
-- **`session.error`, `message.updated` y `stop` no existen** en el `V2Event` de 2.0.4;
-  se conservan en `EventType` del servidor/cliente solo por filas antiguas.
+- `session.compaction.ended` es el evento detallado/canónico que usa este adapter.
+  `session.compacted` no existe en el contrato 2.0.4 (verificado por búsqueda en
+  `@opencode/client@2.0.4` y `@opencode/plugin@2.0.4`); se conserva en `EventType`
+  solo por filas antiguas.
+- `session.step.started` de 2.0.4 no declara `started`; OpenCode 2.0.12 sí lo expuso
+  durante el smoke real. El adapter lo trata como campo opcional y no depende de él.
+- `session.error`, `message.updated` y `stop` se conservan en `EventType` del
+  servidor/cliente únicamente por compatibilidad con filas antiguas.
 - Los `session.step.*` no traen texto de razonamiento: solo metadata operativa
   (agente, modelo, tokens, coste, finish, error). No se captura chain-of-thought.
 - `model` = `ModelRef{id, providerID, variant?}`; `tokens` = `TokenUsageInfo`;
@@ -125,10 +130,13 @@ Notas verificadas (no inventar):
 
 ## Payloads acotados
 
-- `boundValue(value, budget=8000)`: trunca strings recursivamente preservando la
-  forma; devuelve `{ value, truncated }` de forma determinista.
-- `boundEvent` lo aplica a `tool_input`, `tool_output` y `payload`; si algo se
-  cortó, el evento lleva `payload.truncated: true`.
+- `boundValue(value, budget=8000)` aplica una primera cota por campo rico y cuenta
+  también valores primitivos.
+- `serializeEvent` aplica después un límite duro de 16 000 caracteres al cuerpo JSON
+  completo. Si todavía excede el límite, conserva identidad/evento y descarta I/O grande
+  con `payload: { truncated: true, oversized: true, originalChars }`.
+- El sender permite como máximo 32 envíos HTTP simultáneos; al saturarse descarta nuevas
+  observaciones en vez de crear fan-out sin límite.
 - No se guardan secretos deliberadamente ni razonamiento privado.
 
 ## Limpieza

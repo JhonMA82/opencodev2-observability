@@ -254,7 +254,9 @@ export function normalizeStreamEvent(sourceApp: string, event: V2StreamEvent): E
         session_id: sessionID,
         event_type: event.type,
         payload: {
-          status: typeof data["status"] === "string" ? data["status"] : undefined,
+          // OpenCode V2 status is a structured union:
+          // {type:"idle"} | {type:"busy"} | {type:"retry", ...}.
+          status: asRecord(data["status"]),
         },
       };
     case "permission.replied":

@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { boundEvent, boundValue, MAX_FIELD_CHARS, sendEvent } from "../src/sender";
+import {
+  boundEvent,
+  boundValue,
+  MAX_EVENT_CHARS,
+  MAX_FIELD_CHARS,
+  sendEvent,
+  serializeEvent,
+} from "../src/sender";
 
 const ORIGINAL_URL = process.env.OPENCODE_OBSERVABILITY_URL;
 
@@ -24,15 +31,11 @@ describe("payload bound", () => {
     expect(JSON.stringify(first.value).length).toBeLessThanOrEqual(MAX_FIELD_CHARS + 100);
   });
 
-  test("object shape survives truncation", () => {
-    const { value, truncated } = boundValue({
-      keep: "yes",
-      blob: "y".repeat(MAX_FIELD_CHARS + 10),
-    });
+  test("primitive-heavy arrays also consume the budget", () => {
+    const values = Array.from({ length: MAX_FIELD_CHARS * 2 }, (_, index) => index);
+    const { value, truncated } = boundValue(values);
     expect(truncated).toBe(true);
-    const record = value as Record<string, unknown>;
-    expect(record["keep"]).toBe("yes");
-    expect(typeof record["blob"]).toBe("string");
+    expect((value as unknown[]).length).toBeLessThan(values.length);
   });
 
   test("boundEvent flags truncation for the sender", () => {
@@ -44,11 +47,25 @@ describe("payload bound", () => {
     });
     expect(truncated).toBe(true);
   });
+
+  test("the final serialized HTTP body has a hard event-level ceiling", () => {
+    const body = serializeEvent({
+      source_app: "app",
+      session_id: "ses_1",
+      event_type: "tool.execute.after",
+      tool_name: "read",
+      tool_input: { text: "i".repeat(MAX_FIELD_CHARS * 2) },
+      tool_output: { text: "o".repeat(MAX_FIELD_CHARS * 2) },
+      payload: { text: "p".repeat(MAX_FIELD_CHARS * 2) },
+    }, 123);
+    expect(body.length).toBeLessThanOrEqual(MAX_EVENT_CHARS);
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    expect((parsed.payload as Record<string, unknown>)["truncated"]).toBe(true);
+  });
 });
 
 describe("server unavailable", () => {
   test("a failed connection never propagates to OpenCode", async () => {
-    // Port 9 (discard) is expected to refuse connections.
     process.env.OPENCODE_OBSERVABILITY_URL = "http://127.0.0.1:9";
     await expect(
       sendEvent({ source_app: "app", session_id: "ses_1", event_type: "tool.execute.before" }),

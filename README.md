@@ -72,10 +72,12 @@ Sección en español: el contrato V2 que este proyecto asume está documentado e
     (nunca se inventan sesiones).
   - Si el servidor está apagado, la observación se pierde y OpenCode continúa
     (best-effort, timeout de 2 s, sin reintentos).
-  - Los payloads de herramientas se truncan a 8000 caracteres serializados
-    (`truncated: true` en `payload`).
+  - Cada campo rico se acota primero y el cuerpo JSON final tiene un límite duro de
+    16 000 caracteres; al excederlo se conserva identidad/metadata y se marca
+    `truncated: true`.
   - `session.compacted`, `session.error`, `message.updated` y `stop` son nombres V1:
-    no existen en V2 y solo se conservan en el backend por compatibilidad
+    no existen en el contrato 2.0.4 (verificado por búsqueda en `@opencode/client` y
+    `@opencode/plugin`) y solo se conservan en el backend por compatibilidad
     con datos antiguos.
 
 ## Event Flow

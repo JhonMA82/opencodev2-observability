@@ -202,6 +202,19 @@ describe("V2 session lifecycle events", () => {
     expect(normalized?.event_type).toBe("session.compaction.ended");
   });
 
+  test("session.status preserves the structured V2 status object", () => {
+    const normalized = normalizeStreamEvent(APP, {
+      type: "session.status",
+      data: {
+        sessionID: "ses_1",
+        status: { type: "retry", attempt: 2, message: "rate limited", next: 1234 },
+      },
+    });
+    expect(normalized?.payload).toEqual({
+      status: { type: "retry", attempt: 2, message: "rate limited", next: 1234 },
+    });
+  });
+
   test("permission.replied keeps request and reply", () => {
     const normalized = normalizeStreamEvent(APP, {
       type: "permission.replied",

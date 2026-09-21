@@ -79,8 +79,8 @@ export class DatabaseManager {
 
   private updateSessionEventCount(sessionId: string, sourceApp: string) {
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (session_id, source_app, start_time, status)
-      VALUES ($sessionId, $sourceApp, $timestamp, 'active')
+      INSERT INTO sessions (session_id, source_app, start_time, status, event_count)
+      VALUES ($sessionId, $sourceApp, $timestamp, 'active', 1)
       ON CONFLICT(session_id) DO UPDATE SET
         event_count = event_count + 1
     `);
