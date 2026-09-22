@@ -2,10 +2,11 @@ import type { EventPayload } from "./sender";
 
 /**
  * Structural view of the OpenCode V2 contracts this adapter depends on.
- * Verified against `@opencode/plugin@2.0.4` (`dist/promise/tool.d.ts`) and
- * `@opencode/client@2.0.4` (generated `V2Event` union). The plugin compiles
- * against those exact types, so a breaking upstream change fails the build
- * instead of silently changing what we observe.
+ * Verified against `@opencode/plugin@2.0.12` (`dist/promise/tool.d.ts`) and
+ * `@opencode/client@2.0.12` (generated `V2Event` union; the `2.0.4` shapes
+ * this adapter was born against are unchanged in the tool/event surface).
+ * The plugin compiles against those exact types, so a breaking upstream
+ * change fails the build instead of silently changing what we observe.
  */
 
 export interface ToolBeforeInput {

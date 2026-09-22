@@ -1,4 +1,8 @@
 import { Plugin } from "@opencode/plugin";
+// NOTE: "@opencode/plugin" must stay in package.json "dependencies" (never
+// "devDependencies"): the OpenCode server resolves this import from the
+// installed plugin directory, and a missing runtime entry fails the load
+// with "Cannot find package '@opencode/plugin'".
 import {
   normalizeStreamEvent,
   normalizeToolAfter,

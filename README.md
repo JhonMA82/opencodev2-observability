@@ -68,7 +68,8 @@ This installs a **global plugin** that tracks ALL your OpenCode sessions across 
 Sección en español: el contrato V2 que este proyecto asume está documentado en
 [`docs/OPENCODE-V2.md`](docs/OPENCODE-V2.md). Resumen:
 
-- **API package:** `@opencode/plugin@2.0.4` (solo tipos/build; el runtime lo pone OpenCode).
+- **API package:** `@opencode/plugin@2.0.12` (dependencia de runtime: `src/index.ts`
+  lo importa, así que debe estar en `dependencies`, nunca en `devDependencies`).
 - **Entrypoint:** `Plugin.define({ id: "opencode.observability", setup })`.
 - **Hooks usados:** `ctx.tool.hook("execute.before")`, `ctx.tool.hook("execute.after")`.
 - **Eventos usados:** `ctx.event.subscribe()` — `session.created/deleted`,

@@ -5,7 +5,9 @@
 # Single canonical source: plugins/opencode-observability/ in this repo.
 # This script copies that source (no embedded duplicate) into the OpenCode V2
 # global plugin discovery directory and installs its dependencies
-# (@opencode/plugin@2.0.4, types/build only — the runtime is OpenCode itself).
+# (@opencode/plugin is a runtime dependency: src/index.ts imports it, so it
+# must stay in "dependencies", never in "devDependencies", or the OpenCode
+# server fails with "Cannot find package '@opencode/plugin'").
 #
 # Idempotent: re-running it restores the installed copy to the repo state.
 
@@ -42,12 +44,21 @@ echo "  from: $SRC"
 echo "  to:   $DEST"
 rm -rf "$DEST"
 mkdir -p "$DEST"
-cp "$SRC/package.json" "$SRC/index.ts" "$SRC/tsconfig.json" "$DEST/"
-cp -r "$SRC/src" "$DEST/src"
+# Install dependencies FIRST (package.json + tsconfig only), then copy the
+# watched sources (index.ts + src). The OpenCode server caches a failed plugin
+# evaluation until a watched file's content changes, so the final source writes
+# must land with node_modules already complete; otherwise the first reload
+# fails and stays failed until the next content change or service restart.
+cp "$SRC/package.json" "$SRC/tsconfig.json" "$DEST/"
 
 echo ""
-echo "Installing plugin dependencies (@opencode/plugin@2.0.4 for types)..."
+echo "Installing plugin dependencies (@opencode/plugin runtime dependency)..."
 (cd "$DEST" && bun install)
+
+echo ""
+echo "Copying watched sources (after dependencies are complete)..."
+cp "$SRC/index.ts" "$DEST/"
+cp -r "$SRC/src" "$DEST/src"
 
 echo ""
 echo "Typechecking installed copy..."
