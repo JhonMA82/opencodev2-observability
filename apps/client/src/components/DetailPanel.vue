@@ -177,13 +177,22 @@ const getStatusClass = (event: EventRecord) => {
     event.eventType === 'session.execution.failed' ||
     event.eventType === 'session.step.failed' ||
     event.eventType === 'session.error' ||
-    (event.eventType === 'tool.execute.after' && event.payload?.status === 'error')
+    (event.eventType === 'tool.execute.after' && event.payload?.status === 'error') ||
+    (event.eventType === 'andmar.completion' && event.payload?.ok === false) ||
+    (event.eventType === 'andmar.verification' &&
+      event.payload?.action === 'receipt' &&
+      event.payload?.passed === false) ||
+    (event.eventType === 'andmar.delegation' && event.payload?.phase === 'failed')
   ) return 'status-error'
 
   if (
     event.eventType === 'session.execution.interrupted' ||
     event.eventType === 'session.retry.scheduled' ||
-    event.eventType === 'stop'
+    event.eventType === 'stop' ||
+    (event.eventType === 'andmar.verification' &&
+      ((event.payload?.action === 'verify_revision' && event.payload?.ok === false) ||
+       event.payload?.action === 'receipt_rejected')) ||
+    (event.eventType === 'andmar.delegation' && event.payload?.phase === 'denied')
   ) return 'status-warning'
 
   return 'status-success'

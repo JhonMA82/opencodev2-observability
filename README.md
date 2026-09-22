@@ -62,6 +62,7 @@ This installs a **global plugin** that tracks ALL your OpenCode sessions across 
 - Step lifecycle (started/ended/failed, with agent, model, tokens and cost when available)
 - Retry scheduling, compaction, idle status and permission replies
 - Full I/O capture with JSON details (bounded: oversized payloads are truncated and flagged)
+- Optional AndMar semantic events (`routing`, `delegation`, `verification`, `completion`) with outcome-aware dashboard severity
 
 ## OpenCode V2 Compatibility
 

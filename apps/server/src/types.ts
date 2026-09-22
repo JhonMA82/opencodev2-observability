@@ -46,4 +46,8 @@ export type EventType =
   | 'message.updated'
   | 'stop'
   | 'permission.replied'
-  | 'notification';
+  | 'notification'
+  | 'andmar.routing'
+  | 'andmar.delegation'
+  | 'andmar.verification'
+  | 'andmar.completion';

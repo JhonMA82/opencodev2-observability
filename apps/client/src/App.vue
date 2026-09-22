@@ -306,7 +306,12 @@ const getEventSeverity = (event: EventRecord): EventSeverity => {
     event.eventType === 'session.execution.failed' ||
     event.eventType === 'session.step.failed' ||
     event.eventType === 'session.error' ||
-    (event.eventType === 'tool.execute.after' && event.payload?.status === 'error')
+    (event.eventType === 'tool.execute.after' && event.payload?.status === 'error') ||
+    (event.eventType === 'andmar.completion' && event.payload?.ok === false) ||
+    (event.eventType === 'andmar.verification' &&
+      event.payload?.action === 'receipt' &&
+      event.payload?.passed === false) ||
+    (event.eventType === 'andmar.delegation' && event.payload?.phase === 'failed')
   ) {
     return 'error'
   }
@@ -314,7 +319,11 @@ const getEventSeverity = (event: EventRecord): EventSeverity => {
   if (
     event.eventType === 'session.execution.interrupted' ||
     event.eventType === 'session.retry.scheduled' ||
-    event.eventType === 'stop'
+    event.eventType === 'stop' ||
+    (event.eventType === 'andmar.verification' &&
+      ((event.payload?.action === 'verify_revision' && event.payload?.ok === false) ||
+       event.payload?.action === 'receipt_rejected')) ||
+    (event.eventType === 'andmar.delegation' && event.payload?.phase === 'denied')
   ) {
     return 'warning'
   }
@@ -452,6 +461,10 @@ const formatEventType = (type: string) => {
     'message.updated': 'MessageUpdated',
     'stop': 'Stop',
     'notification': 'Notification',
+    'andmar.routing': 'AndMarRouting',
+    'andmar.delegation': 'AndMarDelegation',
+    'andmar.verification': 'AndMarVerification',
+    'andmar.completion': 'AndMarCompletion',
   }
   return names[type] || type.replace(/\./g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
@@ -478,6 +491,10 @@ const getEventBadgeClass = (eventType: string) => {
     'message.updated': 'badge-message',
     'stop': 'badge-stop',
     'notification': 'badge-notification',
+    'andmar.routing': 'badge-session',
+    'andmar.delegation': 'badge-session',
+    'andmar.verification': 'badge-message',
+    'andmar.completion': 'badge-session',
   }
   return classes[eventType] || 'badge-default'
 }
